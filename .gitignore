@@ -6,11 +6,7 @@
 /node_modules/
 
 # Laravel Storage
-/storage/*.key
-/storage/framework/cache/*
-/storage/framework/sessions/*
-/storage/framework/views/*
-/storage/logs/*
+
 /public/storage
 
 # Laravel Cache
@@ -78,4 +74,4 @@ Homestead.yaml
 ########################################
 
 /coverage
-.phpunit.cache
+

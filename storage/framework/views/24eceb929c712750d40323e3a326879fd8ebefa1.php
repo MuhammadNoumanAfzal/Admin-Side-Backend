@@ -1,0 +1,1 @@
+<?php /**PATH C:\xampp\htdocs\project\resources\views/admin/elements/quick_links.blade.php ENDPATH**/ ?>
