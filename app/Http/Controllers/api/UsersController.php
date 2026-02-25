@@ -1015,27 +1015,27 @@ class UsersController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'status' => 'error',
-                'msg' => $validator->errors()->first(),
-                'data' => (object)[],
+                'status' => false,
+                'message' => $validator->errors()->first(),
+                'user' => (object)[],
             ], 422);
         }
 
         $fbToken = $request->facebook_access_token;
 
-        $appId = config('services.facebook.client_id');
-        $appSecret = config('services.facebook.client_secret');
-        $graphVersion = config('services.facebook.graph_version', 'v19.0');
+        $appId = (string) config('services.facebook.client_id');
+        $appSecret = (string) config('services.facebook.client_secret');
+        $graphVersion = (string) config('services.facebook.graph_version', 'v19.0');
 
-        if (!$appId || !$appSecret) {
+        if (empty($appId) || empty($appSecret)) {
             return response()->json([
-                'status' => 'error',
-                'msg' => 'Facebook app config missing in services.php/.env',
-                'data' => (object)[],
+                'status' => false,
+                'message' => 'Facebook app config missing in services.php/.env',
+                'user' => (object)[],
             ], 500);
         }
 
-        $client = new \GuzzleHttp\Client([
+        $client = new Client([
             'base_uri' => "https://graph.facebook.com/{$graphVersion}/",
             'timeout'  => 15,
         ]);
@@ -1053,35 +1053,54 @@ class UsersController extends Controller
 
             $debugData = json_decode($debugRes->getBody()->getContents(), true);
 
-            $isValid = data_get($debugData, 'data.is_valid', false);
+            $isValid = (bool) data_get($debugData, 'data.is_valid', false);
             $tokenAppId = (string) data_get($debugData, 'data.app_id', '');
-            $fbUserId = (string) data_get($debugData, 'data.user_id', '');
+            $fbUserIdFromDebug = (string) data_get($debugData, 'data.user_id', '');
+            $expiresAtUnix = (int) data_get($debugData, 'data.expires_at', 0);
+            $tokenType = (string) data_get($debugData, 'data.type', ''); // USER/APP/etc
 
             if (!$isValid) {
                 return response()->json([
-                    'status' => 'error',
-                    'msg' => 'Invalid Facebook token',
-                    'data' => $debugData,
+                    'status' => false,
+                    'message' => 'Invalid Facebook token',
+                    'user' => (object)[],
                 ], 401);
             }
 
-            if ($tokenAppId !== (string)$appId) {
+            if ($tokenAppId !== $appId) {
                 return response()->json([
-                    'status' => 'error',
-                    'msg' => 'Facebook token app_id does not match this app',
-                    'data' => ['token_app_id' => $tokenAppId, 'expected_app_id' => (string)$appId],
+                    'status' => false,
+                    'message' => 'Facebook token app_id does not match this app',
+                    'user' => (object)[],
                 ], 401);
             }
 
-            if (!$fbUserId) {
+            if ($expiresAtUnix > 0 && $expiresAtUnix < time()) {
                 return response()->json([
-                    'status' => 'error',
-                    'msg' => 'Facebook user_id not found from token',
-                    'data' => $debugData,
+                    'status' => false,
+                    'message' => 'Facebook token expired',
+                    'user' => (object)[],
                 ], 401);
             }
 
-            // 2) Fetch user profile from Facebook
+            // Optional: ensure it's a user token (recommended)
+            if (!empty($tokenType) && strtoupper($tokenType) !== 'USER') {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid Facebook token type',
+                    'user' => (object)[],
+                ], 401);
+            }
+
+            if (empty($fbUserIdFromDebug)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Facebook user_id not found from token',
+                    'user' => (object)[],
+                ], 401);
+            }
+
+            // 2) Fetch user profile from Facebook (id/name/email)
             $meRes = $client->get('me', [
                 'query' => [
                     'fields' => 'id,name,email',
@@ -1091,83 +1110,109 @@ class UsersController extends Controller
 
             $me = json_decode($meRes->getBody()->getContents(), true);
 
-            $fbId = (string) data_get($me, 'id', $fbUserId);
+            $fbId = (string) data_get($me, 'id', $fbUserIdFromDebug);
             $name = (string) data_get($me, 'name', '');
-            $email = data_get($me, 'email'); // can be null if not granted
+            $email = data_get($me, 'email'); // can be null
 
-            // 3) Find existing user (priority: facebook_id, then email)
+            // Extra safety: ensure /me id matches debug user_id
+            if (!empty($fbId) && $fbId !== $fbUserIdFromDebug) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Facebook token user mismatch',
+                    'user' => (object)[],
+                ], 401);
+            }
+
+            // 3) Find user (priority: facebook_id, then email)
             $user = User::where('facebook_id', $fbId)->first();
-
-            if (!$user && $email) {
+            if (!$user && !empty($email)) {
                 $user = User::where('email', $email)->first();
             }
 
-            // 4) Create user if not exists
+            // 4) Create or update user
             if (!$user) {
                 $user = new User();
                 $user->name = $name ?: 'Facebook User';
-                $user->email = $email; // may be null (depends on FB permissions)
+                $user->email = $email; // may be null
                 $user->facebook_id = $fbId;
-
-                // Your project uses is_verified etc
-                if (isset($user->is_verified)) {
-                    $user->is_verified = 1;
-                }
-
+                $user->is_active = $user->is_active ?? 1;
+                $user->is_deleted = $user->is_deleted ?? 0;
                 $user->save();
             } else {
-                // ensure facebook_id saved
+                $dirty = false;
+
                 if (empty($user->facebook_id)) {
                     $user->facebook_id = $fbId;
+                    $dirty = true;
+                }
+
+                // Optionally fill missing email/name (don’t overwrite existing)
+                if (empty($user->email) && !empty($email)) {
+                    $user->email = $email;
+                    $dirty = true;
+                }
+                if (empty($user->name) && !empty($name)) {
+                    $user->name = $name;
+                    $dirty = true;
+                }
+
+                if ($dirty) {
                     $user->save();
                 }
             }
 
-            // 5) Login + create Passport token (your app uses accessToken)
-            Auth::loginUsingId($user->id);
-            $user = User::find($user->id);
+            // 5) Create Passport token + expiry
+            $tokenResult = $user->createToken('FacebookLoginToken');
+            $accessToken = $tokenResult->accessToken;
+            $expiresAt = optional($tokenResult->token->expires_at)->toDateTimeString();
 
-            $token = $user->createToken('FacebookLoginToken')->accessToken;
-
-            // 6) Save device token like your login()
-            if ($request->device_type && $request->device_id) {
-                $deviceToken = UserDeviceToken::where('user_id', $user->id)
-                    ->where('device_id', $request->device_id)
-                    ->first();
-
-                if ($deviceToken) {
-                    $deviceToken->update([
+            // 6) Save device info (if provided)
+            if (!empty($request->device_type) && !empty($request->device_id)) {
+                UserDeviceToken::updateOrCreate(
+                    [
+                        'user_id' => $user->id,
+                        'device_id' => $request->device_id,
+                    ],
+                    [
                         'device_type' => $request->device_type,
-                        'device_id'   => $request->device_id,
-                        'updated_at'  => now(),
-                    ]);
-                } else {
-                    UserDeviceToken::create([
-                        'user_id'     => $user->id,
-                        'device_type' => $request->device_type,
-                        'device_id'   => $request->device_id,
-                    ]);
-                }
+                    ]
+                );
             }
 
+            // 7) Return a clean, consistent response
             return response()->json([
-                'status' => 'success',
-                'msg' => 'Facebook login successful',
-                'data' => $user,
-                'token' => $token,
+                'status' => true,
+                'message' => 'Facebook login successful',
+                'token_type' => 'Bearer',
+                'token' => $accessToken,
+                'expires_at' => $expiresAt,
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'facebook_id' => $user->facebook_id,
+                    'user_role_id' => $user->user_role_id,
+                    'image' => $user->image,
+                    'is_verified' => $user->is_verified,
+                    'created_at' => optional($user->created_at)->toDateTimeString(),
+                    'updated_at' => optional($user->updated_at)->toDateTimeString(),
+                ],
             ], 200);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            $body = $e->getResponse() ? $e->getResponse()->getBody()->getContents() : null;
+        } catch (ClientException $e) {
+            $body = $e->getResponse()
+                ? $e->getResponse()->getBody()->getContents()
+                : null;
 
             return response()->json([
-                'status' => 'error',
-                'msg' => 'Facebook API error',
+                'status' => false,
+                'message' => 'Facebook API error',
                 'error' => $body ?: $e->getMessage(),
             ], 400);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return response()->json([
-                'status' => 'error',
-                'msg' => 'Server error',
+                'status' => false,
+                'message' => 'Server error',
+                // In production, hide this:
                 'error' => $e->getMessage(),
             ], 500);
         }

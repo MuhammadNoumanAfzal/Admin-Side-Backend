@@ -29,7 +29,7 @@
 # Service Account / Firebase / GCP Keys
 ########################################
 
-*.json
+
 *firebase*.json
 *serviceAccount*.json
 *credentials*.json

@@ -16,15 +16,13 @@ class FirebaseAuthController extends Controller
         ]);
 
         try {
-            $factory = (new Factory)
-                ->withServiceAccount(config('services.firebase.credentials'));
-
-            $auth = $factory->createAuth();
+            $auth = (new Factory)
+                ->withServiceAccount(config('services.firebase.credentials'))
+                ->createAuth();
 
             $verifiedIdToken = $auth->verifyIdToken($request->id_token);
 
             $uid = $verifiedIdToken->claims()->get('sub');
-
             $firebaseUser = $auth->getUser($uid);
 
             $user = User::updateOrCreate(
@@ -36,17 +34,22 @@ class FirebaseAuthController extends Controller
                 ]
             );
 
-            // If using Sanctum
-            $token = $user->createToken('mobile')->accessToken;
+            // ✅ Passport token
+            $tokenResult = $user->createToken('mobile');
+            $accessToken = $tokenResult->accessToken;
+
             return response()->json([
                 'status' => true,
-                'token' => $token,
+                'token_type' => 'Bearer',
+                'token' => $accessToken,
+                'expires_at' => optional($tokenResult->token->expires_at)->toDateTimeString(),
                 'user' => $user,
             ]);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
                 'message' => 'Invalid Firebase Token',
+                // In production, you should hide this:
                 'error' => $e->getMessage(),
             ], 401);
         }

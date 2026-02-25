@@ -42,8 +42,8 @@ return [
         'graph_version' => env('FACEBOOK_GRAPH_VERSION', 'v19.0'),
     ],
     'firebase' => [
-    'credentials' => 'C:\\xampp\\firebase\\firebase-service-account.json',
-],
+        'credentials' => 'C:\\xampp\\firebase\\firebase-service-account.json',
+    ],
 
 
 ];
