@@ -41,9 +41,8 @@ return [
         'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
         'graph_version' => env('FACEBOOK_GRAPH_VERSION', 'v19.0'),
     ],
-    'firebase' => [
-        'credentials' => 'C:\\xampp\\firebase\\firebase-service-account.json',
-    ],
-
+ 'firebase' => [
+    'credentials' => storage_path('/firebase/firebase-service-account.json'),
+],
 
 ];
