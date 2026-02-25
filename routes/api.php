@@ -38,7 +38,7 @@ Route::middleware(['GuestApi'])->group(function () {
     Route::post('login/facebook', [App\Http\Controllers\api\UsersController::class, 'facebookLogin']);
 
 
-    Route::post('/auth/firebase', [\App\Http\Controllers\Api\FirebaseAuthController::class, 'login']);
+    Route::post('/auth/firebase', [\App\Http\Controllers\api\FirebaseAuthController::class, 'login']);
 });
 
 
