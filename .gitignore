@@ -1,77 +1,34 @@
-########################################
-# Laravel
-########################################
-
 /vendor/
-/node_modules/
+node_modules/
+npm-debug.log
+yarn-error.log
 
-# Laravel Storage
+# Laravel 4 specific
+bootstrap/compiled.php
+app/storage/
 
-/public/storage
+# Laravel 5 & Lumen specific
+public/storage
+public/hot
 
-# Laravel Cache
+# Laravel 5 & Lumen specific with changed public path
+public_html/storage
+public_html/hot
 
-
-
-########################################
-# Environment Files (SECRETS)
-########################################
-
+storage/*.key
 .env
-.env.*
-.env.backup
+Homestead.yaml
+Homestead.json
+/.vagrant
+.phpunit.result.cache
 
-########################################
-# Service Account / Firebase / GCP Keys
-########################################
+/public/build
+/storage/pail
+.env.backup
+.env.production
+.phpactor.json
+auth.json
+
 
 
 *firebase*.json
-*serviceAccount*.json
-*credentials*.json
-*remyndnow*.json
-
-########################################
-# Public Hot Reload
-########################################
-
-/public/hot
-
-########################################
-# Logs
-########################################
-
-npm-debug.log
-yarn-error.log
-yarn-debug.log
-pnpm-debug.log
-
-########################################
-# IDE / Editor
-########################################
-
-/.idea
-/.vscode
-*.swp
-*.swo
-
-########################################
-# OS Files
-########################################
-
-.DS_Store
-Thumbs.db
-
-########################################
-# Homestead
-########################################
-
-Homestead.json
-Homestead.yaml
-
-########################################
-# Testing / Coverage
-########################################
-
-/coverage
-
