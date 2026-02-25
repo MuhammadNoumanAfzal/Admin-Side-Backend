@@ -14,8 +14,8 @@
 /public/storage
 
 # Laravel Cache
-/bootstrap/cache/*.php
-.phpunit.result.cache
+
+
 
 ########################################
 # Environment Files (SECRETS)
