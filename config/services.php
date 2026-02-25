@@ -42,7 +42,7 @@ return [
         'graph_version' => env('FACEBOOK_GRAPH_VERSION', 'v19.0'),
     ],
  'firebase' => [
-    'credentials' => storage_path('/firebase/firebase-service-account.json'),
+    'credentials' => storage_path('app/firebase/firebase-service-account.json'),
 ],
 
 ];
