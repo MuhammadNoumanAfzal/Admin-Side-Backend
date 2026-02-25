@@ -32,3 +32,5 @@ auth.json
 
 
 *firebase*.json
+
+*firebase-service-account*.json
